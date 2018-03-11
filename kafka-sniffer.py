@@ -63,7 +63,7 @@ def get_producer_data(data,topic,output):
 				messageset_part = unpack('>I',data[offset:offset+4])
                                 output['MessageSetSize'] = messageset_part[0]
 				offset = offset + 4
-				while offset < len(data):
+				while offset < output['DataLen']:
 					##print array.array('B',data[offset:offset+30])
 					message_part = unpack('>QII??Q',data[offset:offset+26])
                                 	output['Offset'] = message_part[0]
@@ -92,7 +92,7 @@ def get_producer_data(data,topic,output):
 					offset = offset + value_len[0]
 					partition_loop = partition_loop - 1
 					print "partition_loop: "+str(partition_loop)
-					if partition_loop > 0 and offset + 8 < len(data):
+					if partition_loop > 0 and offset + 8 < output['DataLen']:
 						partition_others_part = unpack('>II',data[offset:offset+8])
 						output['Partition'] = partition_others_part[0]
 						output['MessageSetSize'] = partition_others_part[1]
