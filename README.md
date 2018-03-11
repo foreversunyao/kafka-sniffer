@@ -11,6 +11,13 @@ Script need to have root privileges
 
 # Usage
 
+```
+python kafka-sniffer.py -h
+Useage: python kafka-sniffer.py -t <topic> -s <source> -p <kafka_port>
+        -t topic name
+        -s source ip address, if all sources, source=0.0.0.0
+        -p kafka port
+```
 
 # Install and dependence
 
