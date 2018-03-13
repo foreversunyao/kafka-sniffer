@@ -198,7 +198,6 @@ def unpack_packet(port,topic,source,kafka_cluster):
 				kafka_data_size = client[0]
 				tcpWorker[key] = tcpWorker[key][4+kafka_data_size:]
 			elif source == s_addr:
-				print "aa"
 				get_producer_data(tcpWorker[key],topic,output)
 				client = unpack('>IHHIH',tcpWorker[key][0:14])
                         	kafka_data_size = client[0]
