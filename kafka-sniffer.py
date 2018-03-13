@@ -24,143 +24,189 @@ import array
 
 clients={'golang':"sarama",'default':"producer",'cpp':"librdkafka",'python':"pykafka"}
 
+def get_messageset_data(data,offset,output,kafka_data_size):
+	messageset_head = unpack('>I',data[offset:offset+4])
+	offset = offset + 4
+        output['MessageSetSize'] = messageset_head[0]
+	get_message_data(data,offset,output,kafka_data_size)
+	return
 
+def get_message_data(data,offset,output,kafka_data_size):
+	print "============= One Message Start =================="
+	message_head = unpack('>QI',data[offset:offset+12])
+	offset = offset + 12
+	output['Offset'] = message_head[0]
+	output['MessageSize'] = message_head[1]
+	message = unpack('>I??',data[offset:offset+6])
+        output['Crc'] = message[0]
+        output['Magic'] = int(message[1])
+        output['Attribute'] = int(message[2])
+	offset = offset + 6
+	## kafka version >= 0.10
+        if output['Magic'] == 1:
+		output['Timestamp'] = unpack('>Q',data[offset:offset+8])
+                offset = offset + 8
+        key_len = unpack('>I',data[offset:offset+4])
+	offset = offset + 4
+        ## key is None
+        if key_len[0] == 4294967295:
+        	output['Key'] = None
+        else:
+                output['Key'] = data[offset:offset+key_len[0]]
+                offset = offset + key_len[0]
+        value_len = unpack('>I',data[offset:offset+4])
+	offset = offset + 4
+        ## print "value_len: "+str(value_len)
+       	output['Value'] = data[offset:offset+value_len[0]]
+	offset = offset + value_len[0]
+	print output.items()
+        print "============= One Message End =================="
+	## print "offset: " + str(offset)
+	## print "kafka_data_size: " + str(kafka_data_size)
+	if offset < kafka_data_size:
+		get_message_data(data,offset,output,kafka_data_size)
+	else:
+		return
+
+def get_topic_data(data,offset,output,topic,kafka_data_size):
+	topic_attribute = unpack('>IH',data[offset:offset+6])
+        output['TopicCount'] = topic_attribute[0]
+        output['TopicLen'] = topic_attribute[1]
+        offset = offset + 6
+        output['TopicName'] = data[offset:offset+output['TopicLen']]
+	offset = offset + output['TopicLen']
+        if output['TopicName'] == topic:
+        	print "============= Request Start =================="
+                partition = unpack('>II',data[offset:offset+8])
+               	output['PartitionCount'] = partition[0]
+                #partition_loop = partition[0]
+                output['Partition'] = partition[1]
+                offset = offset + 8
+                #print array.array('B',data)
+                get_messageset_data(data,offset,output,kafka_data_size)
+		return
 def get_producer_data(data,topic,output):
-	#print array.array('B',data)
+	## apikey + apiversion + correlationid + client
 	offset = 14
-	api_client_part = unpack('>IHHIH',data[0:14])
-	## Producer ApiKey
-	if api_client_part[1] == 0:
-		try:
-			#print data
-#			print array.array('B',data)
-			output['DataLen'] = api_client_part[0]
-                        output['ApiKey'] = api_client_part[1]
-                        output['ApiVersion'] = api_client_part[2]
-                        output['CorrelationId'] = api_client_part[3]
-			client_len = api_client_part[-1]
+	if offset > len(data):
+		return
+	try:
+		client = unpack('>IHHIH',data[0:offset])
+		## Producer ApiKey
+		if client[1] == 0:
+			#print array.array('B',data)
+			output['DataLen'] = client[0]
+                        output['ApiKey'] = client[1]
+                        output['ApiVersion'] = client[2]
+                        output['CorrelationId'] = client[3]
+			client_len = client[4]
 			output['Client'] = data[offset:offset+client_len]
-			if api_client_part[2] == 3:
-				offset = offset + 2
-			else:
-				offset = offset
-			client_len = api_client_part[-1]
 			offset = offset + client_len
-                        conn_part = unpack('>HIIH',data[offset:offset+12])
-			output['RequiredAcks'] = conn_part[0]
-                        output['Timeout'] = conn_part[1]
-			output['TopicCount'] = conn_part[2]
-			offset = offset + 12
-			topic_name = data[offset:offset+conn_part[3]]
-			output['TopicName'] = topic_name
-			offset = offset + conn_part[3]
-        		if topic_name == topic:
-        			partition_part = unpack('>II',data[offset:offset+8])
-                                output['PartitionCount'] = partition_part[0]
-				partition_loop = partition_part[0]
-                                output['Partition'] = partition_part[1]
-				offset = offset + 8
-				messageset_part = unpack('>I',data[offset:offset+4])
-                                output['MessageSetSize'] = messageset_part[0]
-				offset = offset + 4
-				while offset < output['DataLen']:
-					##print array.array('B',data[offset:offset+30])
-					message_part = unpack('>QII??Q',data[offset:offset+26])
-                                	output['Offset'] = message_part[0]
-                                	output['MessageSize'] = message_part[1]
-                                	output['Crc'] = message_part[2]
-                                	output['Magic'] = int(message_part[3])
-                                	output['Attribute'] = int(message_part[4])
-					if int(message_part[3]) == 1:
-                                		output['Timestamp'] = message_part[5]
-						offset = offset + 26
-					## kafka version < 0.10
-					elif int(message_part[3]) == 0 :
-						offset = offset + 18
-					key_len = unpack('>I',data[offset:offset+4])
-                                                ## key is None
-                                        if key_len[0] == 4294967295:
-                                                output['Key'] = None
-                                                offset = offset + 4
-                                        else:
-                                                offset = offset + 4
-                                                output['Key'] = data[offset:offset+key_len[0]]
-                                                offset = offset + key_len[0]
-					value_len = unpack('>I',data[offset:offset+4])
-					offset = offset + 4
-					output['Value'] = data[offset:offset+value_len[0]]
-					offset = offset + value_len[0]
-					partition_loop = partition_loop - 1
-					print "partition_loop: "+str(partition_loop)
-					if partition_loop > 0 and offset + 8 < output['DataLen']:
-						partition_others_part = unpack('>II',data[offset:offset+8])
-						output['Partition'] = partition_others_part[0]
-						output['MessageSetSize'] = partition_others_part[1]
-						offset = offset + 8
-					print output.items()
-				print "=============One Request=================="
-		except Exception as e:
+			## if new protocol version
+			if client[2] == 3:
+				offset = offset + 2
+			client_attribute = unpack('>HI',data[offset:offset+6])
+			output['RequiredAcks'] = client_attribute[0]
+                        output['Timeout'] = client_attribute[1]
+			offset = offset + 6
+			get_topic_data(data,offset,output,topic,client[0])
+			return
+	except Exception as e:
+		kafka_cluster=['']
+		if output['SourceIP'] not in kafka_cluster:
 			print e
-			##print array.array('B',data)
-			pass
+			print output.items()
+		print "============= Request End =================="
+		return
 
 def get_replica_fetcher_data(data,topic):
 	#todo
 	pass
 
 def unpack_packet(port,topic,source,kafka_cluster):
-    try:
-	s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
-    except socket.error , msg:
-        print 'Socket create failed. Error Code : ' + str(msg[0]) + ' Message ' + msg[1]
-        sys.exit()
+	try:
+		s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
+	except socket.error , msg:
+        	print 'Socket create failed. Error Code : ' + str(msg[0]) + ' Message ' + msg[1]
+        	sys.exit()
+    	dataBuffer = bytes()
+	tcpWorker = {}
+	while True:
+		#print "list keys:"
+		tcpWorker.keys()
+	    	packet = s.recvfrom(65565)
+	    	#packet string from tuple
+	    	packet = packet[0]
+	    	#ip header
+	    	ip_header = packet[0:20]
+	    	iph = unpack('!BBHHHBBH4s4s' , ip_header)
+	        #tcp header
+	        version_ihl = iph[0]
+	        version = version_ihl >> 4
+	        ihl = version_ihl & 0xF
+	        iph_length=ihl * 4
+	        tcp_header = packet[iph_length:iph_length+20]
+	        tcph = unpack('!HHLLBBHHH' , tcp_header)
+	    	ttl = iph[5]
+	    	protocol = iph[6]
+	    	s_addr = socket.inet_ntoa(iph[8]);
+	    	d_addr = socket.inet_ntoa(iph[9]);
+	        #tcp header
+	    	tcp_header = packet[iph_length:iph_length+20]
+	    	tcph = unpack('!HHLLBBHHH' , tcp_header)
+	    	s_port = tcph[0]
+	    	d_port = tcph[1]
+	    	sequence = tcph[2]
+		#print "tcp sequece: "+ str(sequence)
+	    	acknowledgement = tcph[3]
+	    	doff_reserved = tcph[4]
+	    	tcph_length = doff_reserved >> 4
+	        #data
+	        h_size = iph_length + tcph_length * 4
+	        data_size = len(packet) - h_size
+	        data = packet[h_size:]
 
-    while True:
-    	packet = s.recvfrom(65565)
-    	#packet string from tuple
-    	packet = packet[0]
-    	#ip header
-    	ip_header = packet[0:20]
-    	iph = unpack('!BBHHHBBH4s4s' , ip_header)
-        #tcp header
-        version_ihl = iph[0]
-        version = version_ihl >> 4
-        ihl = version_ihl & 0xF
-        iph_length=ihl * 4
-        tcp_header = packet[iph_length:iph_length+20]
-        tcph = unpack('!HHLLBBHHH' , tcp_header)
-    	ttl = iph[5]
-    	protocol = iph[6]
-    	s_addr = socket.inet_ntoa(iph[8]);
-    	d_addr = socket.inet_ntoa(iph[9]);
-        #tcp header
-    	tcp_header = packet[iph_length:iph_length+20]
-    	tcph = unpack('!HHLLBBHHH' , tcp_header)
-    	source_port = tcph[0]
-    	dest_port = tcph[1]
-    	sequence = tcph[2]
-    	acknowledgement = tcph[3]
-    	doff_reserved = tcph[4]
-    	tcph_length = doff_reserved >> 4
-        #data
-        h_size = iph_length + tcph_length * 4
-        data_size = len(packet) - h_size
-        data = packet[h_size:]
-
-	#get data by topic&source
-	output={'SourceIP':'','SourcePort':'','DestIP':'','DestPort':'','DataLen':-1,'ApiKey':-1,'ApiVersion':-1,'CorrelationId':-1,'Client':'','RequiredAcks':-1,'Timeout':-1,'TopicName':'','PartitionCount':-1,'TopicCount':-1,'Partition':-1,'MessageSetSize':-1,'Offset':-1,'MessageSize':-1,'Magic':-1,'Attribute':-1,'Timestamp':-1,'Key':'','Value':'','Crc':''}
-	output['SourceIP'] = s_addr
-	output['SourcePort'] = source_port
-	output['DestIP'] = d_addr
-	output['DestPort'] = dest_port
-	if len(data)>12 and source == output['SourceIP'] and output['SourceIP'] not in kafka_cluster and topic in data:
-		get_producer_data(data,topic,output)
-	elif len(data)>12 and source == "0.0.0.0" and output['SourceIP'] not in kafka_cluster and topic in data:
-		get_producer_data(data,topic,output)
-	else:
-		pass
-		#print 'source address or topic is not existing'
-
+		#get data by topic&source
+		output={'SourceIP':'','SourcePort':'','DestIP':'','DestPort':'','DataLen':-1,'ApiKey':-1,'ApiVersion':-1,'CorrelationId':-1,'Client':'','RequiredAcks':-1,'Timeout':-1,'TopicName':'','PartitionCount':-1,'TopicCount':-1,'Partition':-1,'MessageSetSize':-1,'Offset':-1,'MessageSize':-1,'Magic':-1,'Attribute':-1,'Timestamp':-1,'Key':'','Value':'','Crc':''}
+		output['SourceIP'] = s_addr
+		output['SourcePort'] = s_port
+		output['DestIP'] = d_addr
+		output['DestPort'] = d_port
+		if s_addr in kafka_cluster:
+			continue
+		key = s_addr + "," + str(s_port) + "," +d_addr + "," + str(d_port)
+		if key not in tcpWorker:
+			tcpWorker[key] = data
+		else:
+			tcpWorker[key] = tcpWorker[key] + data
+		while True:
+			if len(tcpWorker[key]) < 14:
+				print "data packet is too short to analyze"
+				break
+			try:
+				client = unpack('>IHHIH',tcpWorker[key][0:14])
+			except Exception as e:
+				print "not format"
+				break
+			kafka_data_size = client[0]
+			if len(tcpWorker[key]) < 4 + kafka_data_size:
+				print "split data packet"
+				break
+			if source == '0.0.0.0':
+				get_producer_data(tcpWorker[key],topic,output)
+				client = unpack('>IHHIH',tcpWorker[key][0:14])
+				kafka_data_size = client[0]
+				tcpWorker[key] = tcpWorker[key][4+kafka_data_size:]
+			elif source == s_addr:
+				print "aa"
+				get_producer_data(tcpWorker[key],topic,output)
+				client = unpack('>IHHIH',tcpWorker[key][0:14])
+                        	kafka_data_size = client[0]
+                        	tcpWorker[key] = tcpWorker[key][4+kafka_data_size:]
+			else:
+				break
+		if len(tcpWorker[key]) == 0:
+			tcpWorker.pop(key, None)
 def main():
 	try:
         	opts, args = getopt.getopt(sys.argv[1:], '-ht:s:p:',['h','t','s','p'])
