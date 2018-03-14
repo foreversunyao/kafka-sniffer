@@ -26,6 +26,7 @@ python kafka-sniffer.py -t kafka-sniffer-topic -s 0.0.0.0 -p 9092
 topic: kafka-sniffer-topic
 source: 0.0.0.0
 port: 9092
+======== From 10.65.128.251:63302, Topic kafka-sniffer-topic, Partition Loop 1, Partition 0 =======
 [('MessageSetSize', 222), ('PartitionCount', 1), ('ApiVersion', 2), ('TopicCount', 1), ('DestPort', 9092), ('ApiKey', 0), ('DestIP', '10.65.20.44'), ('Timestamp', 1520754766237), ('RequiredAcks', 1), ('Key', 'a'), ('Offset', 0), ('SourceIP', '10.65.132.85'), ('CorrelationId', 1), ('Magic', 1), ('Partition', 0), ('Value', 'bb'), ('Crc', 1031103259), ('Client', 'kafka-python-producer-1'), ('Timeout', 30000), ('Attribute', 0), ('MessageSize', 25), ('DataLen', 298), ('SourcePort', 40639), ('TopicName', 'kafka-sniffer-topic')]
 [('MessageSetSize', 222), ('PartitionCount', 1), ('ApiVersion', 2), ('TopicCount', 1), ('DestPort', 9092), ('ApiKey', 0), ('DestIP', '10.65.20.44'), ('Timestamp', 1520754766238), ('RequiredAcks', 1), ('Key', 'a'), ('Offset', 1), ('SourceIP', '10.65.132.85'), ('CorrelationId', 1), ('Magic', 1), ('Partition', 0), ('Value', 'bb'), ('Crc', 1256960491), ('Client', 'kafka-python-producer-1'), ('Timeout', 30000), ('Attribute', 0), ('MessageSize', 25), ('DataLen', 298), ('SourcePort', 40639), ('TopicName', 'kafka-sniffer-topic')]
 ```
