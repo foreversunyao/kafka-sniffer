@@ -5,6 +5,7 @@ This script tool can capture and analyze producer request packets to Apache Kafk
 
 # Requirements
 Verified on CentOS 6.8 and Centos 7.0
+
 Script need to have root privileges
 
 
@@ -42,14 +43,14 @@ Python package:
 import socket, sys
 import getopt
 import array
-from struct import *
+import struct
 ```
 
 # Limit
 Right now only support Apache Kafka Version < 0.11.0.1, because since Kafka 0.11.0.1 there is a big change to message format, like support transaction and so on.
 
 # Todo
-Will add support to Kafka > 0.11.0.1
+Will add support to Kafka >= 0.11.0.1
 
 # Related
 [Apache Kafka Protocol](https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol)
