@@ -3,9 +3,9 @@
 '''Funtion.
 1, Unpack the packet by sniffer from kafka tcp port
 2, Get the producer(client) ip, port and kafka protocol related info
-3, Support multi partitions in one request for the topic. 
+3, Support multi partitions in one request for the topic.
 4, Support tcp/ip packet fragmentation
-5, limit: support kafka version < 0.11.0.1 , due to there is a big change on message format since kafka 0.11.0.1
+5, limit: support kafka version < 0.11.0.1 right now, due to there is a big change on message format since kafka 0.11.0.1
 '''
 
 '''Usage.
@@ -127,7 +127,7 @@ def get_topic_data(data,offset,topic,producer_data_len):
 		offset = offset + 4
 		while offset < producer_data_len and partition_loop > 0:
 			partition = struct.unpack('>I',data[offset:offset+4])
-			info_logger.info('======== Partition Loop %s , Partition %s =========' % (partition_loop,partition[0]))
+			info_logger.info('======== From %s:%s, Topic %s, Partition Loop %s, Partition %s =======' % (kafka_data_output['SourceIP'],kafka_data_output['SourcePort'],kafka_data_output['TopicName'],partition_loop,partition[0]))
                 	kafka_data_output['Partition'] = partition[0]
                 	offset = offset + 4
                 	offset = get_messageset_data(data,offset,producer_data_len,partition_loop)
@@ -212,23 +212,30 @@ def unpack_tcpip_packet(source,port,topic):
 		key = s_addr + ',' + str(s_port) + ',' +d_addr + ',' + str(d_port)
 
 		## solve ip/tcp fragmentation
+		first_packet = False
 		if key not in tcp_worker:
+			first_packet = True
 			tcp_worker[key] = data
 		else:
 			tcp_worker[key] = tcp_worker[key] + data
-
 		## parse head of data
 		while True:
 			if len(tcp_worker[key]) < 14:
 				debug_logger.debug('The traffic from %s:%s is too short(len:%s) to analyze.' % (s_addr,s_port,len(tcp_worker[key])))
+				tcp_worker.pop(key, None)
 				break
 			try:
 				client = struct.unpack('>IHHIH',tcp_worker[key][0:14])
 			except Exception as e:
+				## first packet can not be unpacked
+				if first_packet :
+					tcp_worker.pop(key, None)
 				debug_logger.debug('The packet from %s:%s is fragmentation, or upack failed' % (s_addr,s_port))
 				break
 			kafka_data_size = client[0]
 			if len(tcp_worker[key]) < 4 + kafka_data_size:
+				if first_packet :
+					tcp_worker.pop(key, None)
 				debug_logger.debug('The packet from %s:%s is fragmentation, or upack failed' % (s_addr,s_port))
 				break
 			if source == '0.0.0.0':
@@ -239,8 +246,8 @@ def unpack_tcpip_packet(source,port,topic):
                         	tcp_worker[key] = tcp_worker[key][4+kafka_data_size:]
 			else:
 				break
-		## tcp/ip conn pair
-		if len(tcp_worker[key]) == 0:
+		## tcp/ip conn pair is None
+		if key in tcp_worker and len(tcp_worker[key]) == 0:
 			debug_logger.debug('Remove tcp/ip conn pair %s from tcp_worker' % (key))
 			tcp_worker.pop(key, None)
 def main():
