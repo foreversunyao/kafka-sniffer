@@ -3,7 +3,9 @@
 '''Funtion.
 1, Unpack the packet by sniffer from kafka tcp port
 2, Get the producer(client) ip, port and kafka protocol related info
-3, limit: support kafka version < 0.11.0.1 , due to there is a big change on message format since kafka 0.11.0.1
+3, Support multi partitions in one request for the topic. 
+4, Support tcp/ip packet fragmentation
+5, limit: support kafka version < 0.11.0.1 , due to there is a big change on message format since kafka 0.11.0.1
 '''
 
 '''Usage.
@@ -70,15 +72,14 @@ info_logger.addHandler(sniffer_info_log)
 debug_logger = logging.Logger(name='kafka_debug', level=logging.INFO)
 debug_logger.addHandler(sniffer_debug_log)
 
-def get_messageset_data(data,offset,producer_data_len):
+def get_messageset_data(data,offset,producer_data_len,partition_loop):
 	messageset_head = struct.unpack('>I',data[offset:offset+4])
 	kafka_data_output['MessageSetSize'] = messageset_head[0]
 	offset = offset + 4
-	get_message_data(data,offset,producer_data_len)
-	return
+	offset = get_message_data(data,offset,producer_data_len,partition_loop)
+	return offset
 
-def get_message_data(data,offset,producer_data_len):
-	info_logger.info('============= One Message Start ==================')
+def get_message_data(data,offset,producer_data_len,partition_loop):
 	message_head = struct.unpack('>QI',data[offset:offset+12])
 	kafka_data_output['Offset'] = message_head[0]
 	kafka_data_output['MessageSize'] = message_head[1]
@@ -105,11 +106,12 @@ def get_message_data(data,offset,producer_data_len):
        	kafka_data_output['Value'] = data[offset:offset+value_len[0]]
 	offset = offset + value_len[0]
 	info_logger.info(kafka_data_output.items())
-	info_logger.info('============= One Message End ==================')
+	if partition_loop > 1:
+		return offset
 	if offset < producer_data_len:
 		get_message_data(data,offset,producer_data_len)
 	else:
-		return
+		return offset
 
 def get_topic_data(data,offset,topic,producer_data_len):
 	topic_attribute = struct.unpack('>IH',data[offset:offset+6])
@@ -119,12 +121,17 @@ def get_topic_data(data,offset,topic,producer_data_len):
         kafka_data_output['TopicName'] = data[offset:offset+kafka_data_output['TopicLen']]
 	offset = offset + kafka_data_output['TopicLen']
         if kafka_data_output['TopicName'] == topic:
-                partition = struct.unpack('>II',data[offset:offset+8])
-               	kafka_data_output['PartitionCount'] = partition[0]
-                #partition_loop = partition[0]
-                kafka_data_output['Partition'] = partition[1]
-                offset = offset + 8
-                get_messageset_data(data,offset,producer_data_len)
+                partition_count = struct.unpack('>I',data[offset:offset+4])
+               	kafka_data_output['PartitionCount'] = partition_count[0]
+                partition_loop = partition_count[0]
+		offset = offset + 4
+		while offset < producer_data_len and partition_loop > 0:
+			partition = struct.unpack('>I',data[offset:offset+4])
+			info_logger.info('======== Partition Loop %s , Partition %s =========' % (partition_loop,partition[0]))
+                	kafka_data_output['Partition'] = partition[0]
+                	offset = offset + 4
+                	offset = get_messageset_data(data,offset,producer_data_len,partition_loop)
+			partition_loop = partition_loop - 1
 		return
 def get_producer_data(data,topic):
 	## apikey + apiversion + correlationid + client
