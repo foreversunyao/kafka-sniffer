@@ -84,7 +84,7 @@ def get_message_data(data,offset,producer_data_len,partition_loop):
 	kafka_data_output['Offset'] = message_head[0]
 	kafka_data_output['MessageSize'] = message_head[1]
 	offset = offset + 12
-	message = struct.unpack('>I??',data[offset:offset+6])
+	message = struct.unpack('>IBB',data[offset:offset+6])
         kafka_data_output['Crc'] = message[0]
         kafka_data_output['Magic'] = int(message[1])
         kafka_data_output['Attribute'] = int(message[2])
