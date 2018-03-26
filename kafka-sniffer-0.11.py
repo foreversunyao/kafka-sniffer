@@ -58,15 +58,7 @@ kafka_data_output={
 'ProducerEpoch':-1,
 'FirstSequence':-1,
 'RecordCount':-1,
-'RecordLength':-1,
-'RecordAttributes':-1,
-'RecordTimestampDelta':-1,
-'RecordOffsetDelta':-1,
-'KeyLen':-1,
-'Key':None,
-'ValueLen':-1,
-'Value':None,
-'Headers':None
+'Record':None
 }
 
 
@@ -88,29 +80,11 @@ debug_logger = logging.Logger(name='kafka_debug', level=logging.INFO)
 debug_logger.addHandler(sniffer_debug_log)
 
 
-def bytes_to_string(bytes_var):
-	print "bytes_to_string: "+bytes_var
-	return "".join(map(chr, bytes_var))
-
-def decode_varint(stream,offset):
-	print "decode_varint"
-        shift = 0
-        result = {'value': 0,'offset': offset}
-        bytes_count = 1
-        while True:
-		print "result:"+stream
-                i = ord(stream.read(1))
-                result['value'] |= (i & 0x7f) << shift
-                shift += 7
-                bytes_count +=1
-                if not (i & 0x80):
-                        break
-        result['offset'] = result['offset'] + bytes_count
-	print "result:"+result['value']
-        return result
+## todo
+## def decode_varint(stream,offset):
 
 ## for kafka version >= 0.11.0.1
-def get_recordbatch_data(data,offset,producer_data_len,partition_loop):
+def get_recordbatch_data(data,offset):
         recordbatch_head = struct.unpack('>IQIIBIHIQQQHI',data[offset:offset+61])
         kafka_data_output['RecordBatchSize'] = recordbatch_head[0]
         kafka_data_output['FirstOffset'] = recordbatch_head[1]
@@ -126,51 +100,18 @@ def get_recordbatch_data(data,offset,producer_data_len,partition_loop):
         kafka_data_output['ProducerEpoch'] = recordbatch_head[11]
         kafka_data_output['FirstSequence'] = recordbatch_head[12]
         offset = offset + 61
-        offset = get_record_data(data,offset,producer_data_len,partition_loop)
+	record_batch_size = recordbatch_head[0]
+        offset = get_record_data(data,offset,record_batch_size)
         return offset
 
 ## for kafka version >= 0.11.0.1
-def get_record_data(data,offset,producer_data_len,partition_loop):
-	print "get_record_data"
-	print array.array('B',data)
+def get_record_data(data,offset,record_batch_size):
 	record_head = struct.unpack('>I',data[offset:offset+4])
-	kafka_data_output['RecordCount'] = int(record_head[0])
-	record_count = int(record_head[0])
 	offset = offset + 4
-        decode_varint_result = {'value': 0,'offset': 0 }
-	#print kafka_data_output.items()
-	s_data = bytes_to_string(data[offset:])
-	result = decode_varint(io.BytesIO(s_data),offset)
-	kafka_data_output['RecordLength'] = result['value']
-	offset = offset + result['offset']
-	record_attribute = struct.unpack('>B',data[offset:offset+1])
-	kafka_data_output['RecordAttributes'] = record_attribute[0]
-	offset = offset + 1
-	result = decode_varint(data[offset:],offset)
-	kafka_data_output['RecordTimestampDelta'] = result['value']
-        offset = offset + result['offset']
-	result = decode_varint(data[offset:],offset)
-        kafka_data_output['RecordOffsetDelta'] = result['value']
-        offset = offset + result['offset']
-	result = decode_varint(data[offset:],offset)
-        kafka_data_output['KeyLen'] = result['value']
-        offset = offset + result['offset']
-	kafka_data_output['Key'] = data[offset:offset+result['value']]
-	offset = offset + result['value']
-	result = decode_varint(data[offset:],offset)
-	kafka_data_output['ValueLen'] = result['value']
-        offset = offset + result['offset']
-	kafka_data_output['Value'] = data[offset:offset+result['value']]
-	offset = offset + result['value']
-	kafka_data_output['Headers'] = data[offset:]
-	print kafka_data_output.items()
-	#length
-	while int(record_head[0]) > 0:
-		get_record_data(data,offset,producer_data_len)
-		record_count = record_count - 1
-	decode_varint(data)
-	decode_bytes(data[offset:offset+1])
-        record_head = struct.unpack('>?',data[offset:offset+1])
+	kafka_data_output['RecordCount'] = record_head[0]
+	kafka_data_output['Record'] = data[offset:offset + record_batch_size - 61]
+	offset = offset + record_batch_size - 61
+	info_logger.info(kafka_data_output.items())
         return offset
 
 def get_topic_data(data,offset,topic,producer_data_len):
@@ -191,7 +132,7 @@ def get_topic_data(data,offset,topic,producer_data_len):
                 	kafka_data_output['Partition'] = partition[0]
                 	offset = offset + 4
                 	#offset = get_messageset_data(data,offset,producer_data_len,partition_loop)
-                	offset = get_recordbatch_data(data,offset,producer_data_len,partition_loop)
+                	offset = get_recordbatch_data(data,offset)
 			partition_loop = partition_loop - 1
 		return
 def get_producer_data(data,topic):
