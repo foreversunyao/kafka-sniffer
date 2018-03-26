@@ -109,7 +109,7 @@ def get_message_data(data,offset,producer_data_len,partition_loop):
 	if partition_loop > 1:
 		return offset
 	if offset < producer_data_len:
-		get_message_data(data,offset,producer_data_len)
+		get_message_data(data,offset,producer_data_len,partition_loop)
 	else:
 		return offset
 
